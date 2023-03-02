@@ -7,6 +7,7 @@ const Editor =  () => {
   const [pageList, setPageList] = useState([])
   const [currentPage, setCurrentPage] = useState("index.html")
   const [newPageName, setNewPageName] = useState("")
+  const [frame, setFrame] = useState()
 
   useEffect(()=> {
   init(currentPage)
@@ -27,9 +28,33 @@ const Editor =  () => {
     setCurrentPage(`../${page}`)
     const frame = document.querySelector('iframe')
     frame.load(currentPage, ()=> {
-      console.log(page)
+      const body = frame.contentDocument.body;
+      let textNodes = []
+      function recurse(el){
+        el.childNodes.forEach(node => {
+          if (node.nodeName === '#text' && node.nodeValue.replace(/\s+/, '').length > 0){
+            textNodes.push(node)
+            console.log(node)
+          } else {
+            recurse(node)
+          }
+        })
+      }
+
+      recurse(body)
+
+      textNodes.forEach(node => {
+        const wrapper = frame.contentDocument.createElement('text-editor');
+        node.parentNode.replaceChild(wrapper, node);
+        wrapper.appendChild(node)
+        wrapper.contentEditable = 'true'
+      })
+
     })
   }
+
+
+
 
   function createNewPage() {
     axios
