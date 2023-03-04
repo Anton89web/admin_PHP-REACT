@@ -1,40 +1,33 @@
 import axios from 'axios';
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import "../../helpers/iframeLoader"
+import virtualDom from 'react-dom'
+import {logPlugin} from "@babel/preset-env/lib/debug";
+
+
 
 const Editor =  () => {
-
   const [pageList, setPageList] = useState([])
   const [currentPage, setCurrentPage] = useState("index.html")
   const [newPageName, setNewPageName] = useState("")
-  const [frame, setFrame] = useState()
 
   useEffect(()=> {
-  init(currentPage)
+    init(currentPage)
   }, [])
 
-  function loadPageList() {
-    axios
-      .get("./api")
-      .then(res => setPageList(res.data))
+  function parseStrDOM(str){
+    const parser = new DOMParser();
+    return parser.parseFromString(str, "text/html")
+
   }
 
-  function init (page){
-    open(page)
-    loadPageList()
-  }
-
-  function open(page){
-    setCurrentPage(`../${page}`)
-    const frame = document.querySelector('iframe')
-    frame.load(currentPage, ()=> {
-      const body = frame.contentDocument.body;
+  function wrapTextNodes(dom){
+      const body = dom.body;
       let textNodes = []
       function recurse(el){
         el.childNodes.forEach(node => {
           if (node.nodeName === '#text' && node.nodeValue.replace(/\s+/, '').length > 0){
             textNodes.push(node)
-            console.log(node)
           } else {
             recurse(node)
           }
@@ -43,18 +36,65 @@ const Editor =  () => {
 
       recurse(body)
 
-      textNodes.forEach(node => {
-        const wrapper = frame.contentDocument.createElement('text-editor');
+      textNodes.forEach((node, i) => {
+        const wrapper = dom.createElement('text-editor');
         node.parentNode.replaceChild(wrapper, node);
         wrapper.appendChild(node)
-        wrapper.contentEditable = 'true'
+        wrapper.setAttribute("nodeid", i)
       })
 
-    })
+    return dom;
   }
 
+  function serializerDOMToString(dom){
+  const serializer = new XMLSerializer();
+  return serializer.serializeToString(dom)
+  }
 
+  function loadPageList() {
+    axios
+      .get("./api")
+      .then(res => setPageList(res.data))
 
+  }
+
+  function init (page){
+    open(page)
+    loadPageList()
+  }
+
+  function open(page){
+    const frame = document.querySelector('iframe')
+    setCurrentPage(`../${page}?rnd=${Math.random()}`)
+
+    axios
+      .get(`../${page}`)
+      .then(res => parseStrDOM(res.data))
+      .then(res => wrapTextNodes(res))
+      .then(dom => {
+        virtualDom = dom
+        return dom
+      })
+      .then(res => serializerDOMToString(res))
+      .then(html => axios.post("./api/saveTempPage.php",{html}))
+      .then(()=> frame.load("../temp.html"))
+      .then(()=> enableEditing(frame))
+  }
+
+  function enableEditing(frame) {
+    frame.contentDocument.body.querySelectorAll("text-editor")
+      .forEach(e =>{
+        e.contentEditable = "true"
+        e.addEventListener("input", ()=> {
+          onTextEditor(e)
+        })
+      } )
+  }
+
+  function onTextEditor (e){
+    const id = e.getAttribute("nodeid")
+    virtualDom.body.querySelector(`[nodeid="${id}"]`).innerHTML= e.innerHTML
+  }
 
   function createNewPage() {
     axios
