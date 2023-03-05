@@ -2,7 +2,10 @@ import axios from 'axios';
 import React, {useEffect, useState} from 'react';
 import "../../helpers/iframeLoader"
 import virtualDom from 'react-dom'
-import {logPlugin} from "@babel/preset-env/lib/debug";
+import {serializerDOMToString, unwrapTextNodes, parseStrDOM, wrapTextNodes} from "../../helpers/dom-helper";
+import EditorText from "../editor-text/editor-text";
+import UIkit from "uikit";
+import Spinner from "../spinner/spinner";
 
 
 
@@ -10,65 +13,31 @@ const Editor =  () => {
   const [pageList, setPageList] = useState([])
   const [currentPage, setCurrentPage] = useState("index.html")
   const [newPageName, setNewPageName] = useState("")
+  const [loading, setLoading] = useState(true)
+  const spinner = loading? <Spinner active/> : <Spinner/>
 
   useEffect(()=> {
     init(currentPage)
   }, [])
 
-  function parseStrDOM(str){
-    const parser = new DOMParser();
-    return parser.parseFromString(str, "text/html")
-
-  }
-
-  function wrapTextNodes(dom){
-      const body = dom.body;
-      let textNodes = []
-      function recurse(el){
-        el.childNodes.forEach(node => {
-          if (node.nodeName === '#text' && node.nodeValue.replace(/\s+/, '').length > 0){
-            textNodes.push(node)
-          } else {
-            recurse(node)
-          }
-        })
-      }
-
-      recurse(body)
-
-      textNodes.forEach((node, i) => {
-        const wrapper = dom.createElement('text-editor');
-        node.parentNode.replaceChild(wrapper, node);
-        wrapper.appendChild(node)
-        wrapper.setAttribute("nodeid", i)
-      })
-
-    return dom;
-  }
-
-  function serializerDOMToString(dom){
-  const serializer = new XMLSerializer();
-  return serializer.serializeToString(dom)
-  }
 
   function loadPageList() {
     axios
       .get("./api")
       .then(res => setPageList(res.data))
-
   }
 
   function init (page){
-    open(page)
+    open(page, isLoaded)
     loadPageList()
   }
 
-  function open(page){
+  function open(page, cb){
     const frame = document.querySelector('iframe')
-    setCurrentPage(`../${page}?rnd=${Math.random()}`)
+    setCurrentPage(page)
 
     axios
-      .get(`../${page}`)
+      .get(`../${page}?rnd=${Math.random()}`)
       .then(res => parseStrDOM(res.data))
       .then(res => wrapTextNodes(res))
       .then(dom => {
@@ -79,22 +48,49 @@ const Editor =  () => {
       .then(html => axios.post("./api/saveTempPage.php",{html}))
       .then(()=> frame.load("../temp.html"))
       .then(()=> enableEditing(frame))
+      .then(()=> injectStyles(frame))
+      .then(cb)
   }
+
+  function save(onSuccess, onError){
+    isLoading()
+    const newDom = virtualDom.cloneNode(virtualDom)
+    unwrapTextNodes(newDom)
+    const html = serializerDOMToString(newDom)
+    axios
+      .post("./api/savePage.php", {pageName: currentPage, html})
+      .then(onSuccess)
+      .catch(onError)
+      .finally(isLoaded)
+  }
+
+
 
   function enableEditing(frame) {
     frame.contentDocument.body.querySelectorAll("text-editor")
-      .forEach(e =>{
-        e.contentEditable = "true"
-        e.addEventListener("input", ()=> {
-          onTextEditor(e)
-        })
-      } )
+      .forEach(element =>{
+        const id = element.getAttribute("nodeid")
+        const virtualElement = virtualDom.body.querySelector(`[nodeid="${id}"]`)
+        new EditorText(element, virtualElement)
+      })
   }
 
-  function onTextEditor (e){
-    const id = e.getAttribute("nodeid")
-    virtualDom.body.querySelector(`[nodeid="${id}"]`).innerHTML= e.innerHTML
+  function injectStyles(frame) {
+    const style = frame.contentDocument.createElement("style")
+    style.innerHTML = `
+      text-editor:hover{
+      outline: 3px solid orange;
+      outline-offset: 8px;
+      }
+      text-editor:focus{
+      outline: 3px solid red;
+      outline-offset: 8px;
+      }
+    `;
+    frame.contentDocument.head.appendChild(style)
   }
+
+
 
   function createNewPage() {
     axios
@@ -110,24 +106,41 @@ const Editor =  () => {
       .catch(() => alert("Страницы не существует!"));
   }
 
+  function isLoading(){
+    setLoading(true)
+  }
+
+  function isLoaded(){
+    setLoading(false)
+  }
 
 
   return (
     <>
       <iframe src={currentPage} frameBorder="0" />
-      {/*    {pageList.length ? pageList.map((page, i) => {*/}
-      {/*    return (*/}
-      {/*        <h1 key={i}>{page}*/}
-      {/*            <a*/}
-      {/*            href="#"*/}
-      {/*            onClick={() => deletePage(page)}>(x)</a>*/}
-      {/*        </h1>*/}
-      {/*    )*/}
-      {/*}): ''}*/}
-      {/*        <input*/}
-      {/*            onChange={(e) => setNewPageName( e.target.value)}*/}
-      {/*            type="text"/>*/}
-      {/*        <button onClick={createNewPage}>Создать страницу</button>*/}
+      {spinner}
+      <div className="panel">
+        <button className="uk-button uk-button-primary" uk-toggle="target: #modal-save">Опубликовать</button>
+      </div>
+      <div id="modal-save" uk-modal="true" container="false">
+        <div className="uk-modal-dialog uk-modal-body">
+          <h2 className="uk-modal-title">Сохранение</h2>
+          <p>Вы действительно хотите сохранить изменения?</p>
+          <p className="uk-text-right">
+            <button className="uk-button uk-button-default uk-modal-close" type="button">Отменить</button>
+            <button
+              onClick={()=>{save(
+                ()=> UIkit.notification({message: 'Успешно сохранено', status: 'success'}),
+                ()=> UIkit.notification({message: 'Ошибка сохранения', status: 'danger'})
+              )}}
+              className="uk-button uk-button-primary uk-modal-close"
+              type="button"
+            >Опубликовать</button>
+          </p>
+        </div>
+      </div>
+
+
     </>
   )
 }
