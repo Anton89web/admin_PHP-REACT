@@ -6,30 +6,65 @@ import {serializerDOMToString, unwrapTextNodes, parseStrDOM, wrapTextNodes} from
 import EditorText from "../editor-text/editor-text";
 import UIkit from "uikit";
 import Spinner from "../spinner/spinner";
+import ConfirmModal from "../confirm-modal";
+import ChooseModal from "../choose-modal";
+import Panel from "../panel";
 
 
 
 const Editor =  () => {
   const [pageList, setPageList] = useState([])
   const [currentPage, setCurrentPage] = useState("index.html")
-  const [newPageName, setNewPageName] = useState("")
   const [loading, setLoading] = useState(true)
+  const [backupsList, setBackupsList] = useState([])
   const spinner = loading? <Spinner active/> : <Spinner/>
 
+
+
   useEffect(()=> {
-    init(currentPage)
+    init(null, currentPage)
   }, [])
 
 
   function loadPageList() {
     axios
-      .get("./api")
+      .get("./api/pageList.php")
       .then(res => setPageList(res.data))
   }
 
-  function init (page){
+  function restoreBackup(e, backup) {
+    if (e) {
+      e.preventDefault();
+    }
+    UIkit.modal.confirm("Вы действительно хотите восстановить страницу из этой резервной копии? Все несохраненные данные будут потеряны!", {labels: {ok: 'Восстановить', cancel: 'Отмена'}})
+      .then(() => {
+        isLoading()
+        return axios
+          .post('./api/restoreBackup.php', {"page": currentPage, "file": backup})
+      })
+      .then(() => {
+        open(currentPage, isLoaded);
+      })
+  }
+
+  function loadBackupsList() {
+    axios
+      .get("./backups/backups.json")
+      .then(res => setBackupsList( res.data.filter(backup => {
+        return backup?.page === currentPage;
+      })))
+  }
+
+
+
+  function init (e, page){
+    if(e){
+      e.preventDefault();
+    }
+    isLoading()
     open(page, isLoaded)
     loadPageList()
+    loadBackupsList()
   }
 
   function open(page, cb){
@@ -46,22 +81,29 @@ const Editor =  () => {
       })
       .then(res => serializerDOMToString(res))
       .then(html => axios.post("./api/saveTempPage.php",{html}))
-      .then(()=> frame.load("../temp.html"))
+      .then(()=> frame.load("../rb4vok5db_sdgdr.html"))
+      .then(()=> axios.post("./api/deleteTempPage.php"))
       .then(()=> enableEditing(frame))
       .then(()=> injectStyles(frame))
       .then(cb)
+
+    loadBackupsList()
+
   }
 
-  function save(onSuccess, onError){
+  async function  save(onSuccess, onError){
     isLoading()
     const newDom = virtualDom.cloneNode(virtualDom)
     unwrapTextNodes(newDom)
     const html = serializerDOMToString(newDom)
-    axios
+    await axios
       .post("./api/savePage.php", {pageName: currentPage, html})
       .then(onSuccess)
       .catch(onError)
       .finally(isLoaded)
+
+    loadBackupsList()
+
   }
 
 
@@ -91,21 +133,6 @@ const Editor =  () => {
   }
 
 
-
-  function createNewPage() {
-    axios
-      .post("./api/createNewPage.php", {"name": newPageName})
-      .then(loadPageList())
-      .catch(() => alert("Страница уже существует!"));
-  }
-
-  function deletePage(page) {
-    axios
-      .post("./api/deletePage.php", {"name": page})
-      .then(loadPageList())
-      .catch(() => alert("Страницы не существует!"));
-  }
-
   function isLoading(){
     setLoading(true)
   }
@@ -115,32 +142,15 @@ const Editor =  () => {
   }
 
 
+  console.log(backupsList)
   return (
     <>
-      <iframe src={currentPage} frameBorder="0" />
+      <iframe src='' frameBorder="0" />
       {spinner}
-      <div className="panel">
-        <button className="uk-button uk-button-primary" uk-toggle="target: #modal-save">Опубликовать</button>
-      </div>
-      <div id="modal-save" uk-modal="true" container="false">
-        <div className="uk-modal-dialog uk-modal-body">
-          <h2 className="uk-modal-title">Сохранение</h2>
-          <p>Вы действительно хотите сохранить изменения?</p>
-          <p className="uk-text-right">
-            <button className="uk-button uk-button-default uk-modal-close" type="button">Отменить</button>
-            <button
-              onClick={()=>{save(
-                ()=> UIkit.notification({message: 'Успешно сохранено', status: 'success'}),
-                ()=> UIkit.notification({message: 'Ошибка сохранения', status: 'danger'})
-              )}}
-              className="uk-button uk-button-primary uk-modal-close"
-              type="button"
-            >Опубликовать</button>
-          </p>
-        </div>
-      </div>
-
-
+      <Panel/>
+      <ConfirmModal modal={true} target={'modal-save'} method={save}/>
+      <ChooseModal modal={true} target={'modal-open'} data={pageList} redirect={init}/>
+      <ChooseModal modal={true} target={'modal-backup'} data={backupsList} redirect={restoreBackup}/>
     </>
   )
 }
