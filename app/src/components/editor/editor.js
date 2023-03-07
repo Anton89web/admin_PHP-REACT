@@ -2,7 +2,14 @@ import axios from 'axios';
 import React, {useEffect, useState} from 'react';
 import "../../helpers/iframeLoader"
 import virtualDom from 'react-dom'
-import {serializerDOMToString, unwrapTextNodes, parseStrDOM, wrapTextNodes} from "../../helpers/dom-helper";
+import {
+  serializerDOMToString,
+  unwrapTextNodes,
+  parseStrDOM,
+  wrapTextNodes,
+  wrapImages,
+  unWrapImages
+} from "../../helpers/dom-helper";
 import EditorText from "../editor-text/editor-text";
 import UIkit from "uikit";
 import Spinner from "../spinner/spinner";
@@ -10,6 +17,8 @@ import ConfirmModal from "../confirm-modal";
 import ChooseModal from "../choose-modal";
 import Panel from "../panel";
 import EditorMeta from "../editor-meta";
+import EditorImages from "../editor-images";
+import Login from "../login";
 
 
 
@@ -21,13 +30,20 @@ const Editor =  () => {
   const [loading, setLoading] = useState(true)
   const [backupsList, setBackupsList] = useState([])
   const [virtualDomState, setVirtualDomState] = useState()
+  const [auth, setAuth] = useState(false)
   const spinner = loading? <Spinner active/> : <Spinner/>
 
 
   useEffect(()=> {
+    checkAuth();
     init(null, currentPage)
   }, [])
 
+  function checkAuth() {
+  axios
+    .get('./api/checkAuth.php')
+    .then(res => setAuth(res.data.auth))
+  }
 
   function loadPageList() {
     axios
@@ -78,6 +94,7 @@ const Editor =  () => {
       .get(`../${page}?rnd=${Math.random()}`)
       .then(res => parseStrDOM(res.data))
       .then(res => wrapTextNodes(res))
+      .then(res => wrapImages(res))
       .then(dom => {
         virtualDom = dom
         setVirtualDomState(dom)
@@ -95,15 +112,16 @@ const Editor =  () => {
 
   }
 
-  async function save(onSuccess, onError){
+  async function save(){
     isLoading()
     const newDom = virtualDom.cloneNode(virtualDom)
     unwrapTextNodes(newDom)
+    unWrapImages(newDom)
     const html = serializerDOMToString(newDom)
     await axios
       .post("./api/savePage.php", {pageName: currentPage, html})
-      .then(onSuccess)
-      .catch(onError)
+      .then(()=> showNotifications('Успешно сохранено', 'success'))
+      .catch(()=> showNotifications('Ошибка сохранения', 'danger'))
       .finally(isLoaded)
 
     loadBackupsList()
@@ -116,6 +134,13 @@ const Editor =  () => {
         const id = element.getAttribute("nodeid")
         const virtualElement = virtualDom.body.querySelector(`[nodeid="${id}"]`)
         new EditorText(element, virtualElement)
+      })
+
+    frame.contentDocument.body.querySelectorAll("[editableimgid]")
+      .forEach(element =>{
+        const id = element.getAttribute("editableimgid")
+        const virtualElement = virtualDom.body.querySelector(`[editableimgid="${id}"]`)
+        new EditorImages(element, virtualElement, isLoading, isLoaded, showNotifications)
       })
   }
 
@@ -130,10 +155,17 @@ const Editor =  () => {
       outline: 3px solid red;
       outline-offset: 8px;
       }
+      [editableimgid]:hover{
+       outline: 3px solid orange;
+       outline-offset: 8px;
+      }
     `;
     frame.contentDocument.head.appendChild(style)
   }
 
+  function showNotifications(message, status){
+    UIkit.notification({message, status})
+  }
 
   function isLoading(){
     setLoading(true)
@@ -143,10 +175,14 @@ const Editor =  () => {
     setLoading(false)
   }
 
+  if(!auth){
+    return <Login/>
+  }
 
   return (
     <>
       <iframe src='' frameBorder="0" />
+      <input id="img-upload" type="file" accept="image/*" style={{display: 'none'}}/>
       {spinner}
       <Panel virtualDomState={virtualDomState}/>
       <ConfirmModal modal={true} target={'modal-save'} method={save}/>

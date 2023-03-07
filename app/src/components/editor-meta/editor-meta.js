@@ -44,7 +44,6 @@ const EditorMeta = ({modal, target, virtualDom}) => {
 
 
     }
-    console.log(meta)
 
    function applyMeta() {
        title = virtualDom.head.querySelector('title')

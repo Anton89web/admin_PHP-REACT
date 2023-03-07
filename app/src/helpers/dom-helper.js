@@ -40,3 +40,15 @@
     return parser.parseFromString(str, "text/html")
   }
 
+  export function wrapImages(dom){
+    dom.body.querySelectorAll('img').forEach((img, i)=>{
+      img.setAttribute('editableimgid', i);
+    })
+    return dom
+  }
+
+  export function unWrapImages(dom){
+    dom.body.querySelectorAll('[editableimgid]').forEach((img, i)=>{
+      img.removeAttribute('editableimgid');
+    })
+  }

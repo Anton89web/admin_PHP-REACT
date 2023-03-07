@@ -17,7 +17,7 @@ if ($newHTML && $file){
     $backupFN = uniqid() . ".html";
 
     copy("../../" . $file, "../backups/" . $backupFN );
-    array_push($backups, ["page" => $file, "file" => $backupFN, "time" => date("H:i:s d:m:y")]);
+    array_push($backups, ["page" => $file, "file" => $backupFN, "time" => date("H:i:s d-m-Y")]);
     file_put_contents("../backups/backups.json", json_encode($backups));
     file_put_contents("../../" . $file, $newHTML);
 } else {
