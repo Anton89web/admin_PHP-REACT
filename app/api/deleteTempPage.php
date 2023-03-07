@@ -1,4 +1,5 @@
 <?php
+
 $file = "../../rb4vok5db_sdgdr.html";
 
 if (file_exists($file)) {

@@ -1,11 +1,9 @@
-import React, {Component, useState} from 'react';
+import React, {useState} from 'react';
+
+
  const Login = ({login, lengthErr, logErr})=> {
+
     const [pass, setPass] = useState("")
-
-    function onPasswordChange(e) {
-        this.setState(e.target.value)
-    }
-
 
     let renderLogErr, renderLengthErr;
 
@@ -25,7 +23,7 @@ import React, {Component, useState} from 'react';
                         className="uk-input uk-margin-top"
                         placeholder="Пароль"
                         value={pass}
-                        onChange={(e) => onPasswordChange(e)}/>
+                        onChange={(e) => setPass(e.target.value)}/>
                         {renderLogErr}
                         {renderLengthErr}                    
                     <button 

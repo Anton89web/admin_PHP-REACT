@@ -31,18 +31,48 @@ const Editor =  () => {
   const [backupsList, setBackupsList] = useState([])
   const [virtualDomState, setVirtualDomState] = useState()
   const [auth, setAuth] = useState(false)
+  const [loginError, setLoginError] = useState(false)
+  const [loginLengthErr, setLengthErr] = useState(false)
+
   const spinner = loading? <Spinner active/> : <Spinner/>
 
 
   useEffect(()=> {
     checkAuth();
-    init(null, currentPage)
-  }, [])
+    if(auth){
+      init(null, currentPage)
+    }
+  }, [auth])
 
   function checkAuth() {
   axios
     .get('./api/checkAuth.php')
-    .then(res => setAuth(res.data.auth))
+    .then(res => {
+      setAuth(res.data.auth)
+    })
+  }
+
+  function login(pass){
+
+     if(pass.length > 5){
+      axios.post('./api/login.php', {"password": pass})
+         .then(res => {
+           setAuth(res.data.auth)
+           setLoginError(!res.data.auth)
+           setLengthErr(false)
+         })
+     } else {
+       setLoginError(false)
+       setLengthErr(true)
+     }
+  }
+
+  function logout() {
+    axios
+      .get('./api/logout.php')
+      .then(() => {
+        window.location.replace("/")
+      })
   }
 
   function loadPageList() {
@@ -74,16 +104,16 @@ const Editor =  () => {
       })))
   }
 
-
-
   function init (e, page){
     if(e){
       e.preventDefault();
     }
-    isLoading()
-    open(page, isLoaded)
-    loadPageList()
-    loadBackupsList()
+    if(auth){
+      isLoading()
+      open(page, isLoaded)
+      loadPageList()
+      loadBackupsList()
+    }
   }
 
   function open(page, cb){
@@ -176,7 +206,7 @@ const Editor =  () => {
   }
 
   if(!auth){
-    return <Login/>
+    return <Login login={login} logErr={loginError} lengthErr={loginLengthErr}/>
   }
 
   return (
@@ -185,7 +215,26 @@ const Editor =  () => {
       <input id="img-upload" type="file" accept="image/*" style={{display: 'none'}}/>
       {spinner}
       <Panel virtualDomState={virtualDomState}/>
-      <ConfirmModal modal={true} target={'modal-save'} method={save}/>
+      <ConfirmModal
+        modal={true}
+        target={'modal-save'}
+        method={save}
+        text={{
+          title: "Сохранение",
+          descr: "Вы действительно хотите сохранить изменения?",
+          btn: "Опубликовать",
+        }}
+      />
+      <ConfirmModal
+        modal={true}
+        target={'modal-logout'}
+        method={logout}
+        text={{
+          title: "Выход",
+          descr: "Вы действительно хотите выйти?",
+          btn: "Выйти",
+        }}
+      />
       <ChooseModal modal={true} target={'modal-open'} data={pageList} redirect={init}/>
       <ChooseModal modal={true} target={'modal-backup'} data={backupsList} redirect={restoreBackup}/>
       {virtualDomState && <EditorMeta modal={true} target={'modal-meta'} virtualDom={virtualDomState}/>}
