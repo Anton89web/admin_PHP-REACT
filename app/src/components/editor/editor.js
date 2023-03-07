@@ -9,6 +9,9 @@ import Spinner from "../spinner/spinner";
 import ConfirmModal from "../confirm-modal";
 import ChooseModal from "../choose-modal";
 import Panel from "../panel";
+import EditorMeta from "../editor-meta";
+
+
 
 
 
@@ -17,8 +20,8 @@ const Editor =  () => {
   const [currentPage, setCurrentPage] = useState("index.html")
   const [loading, setLoading] = useState(true)
   const [backupsList, setBackupsList] = useState([])
+  const [virtualDomState, setVirtualDomState] = useState()
   const spinner = loading? <Spinner active/> : <Spinner/>
-
 
 
   useEffect(()=> {
@@ -77,6 +80,7 @@ const Editor =  () => {
       .then(res => wrapTextNodes(res))
       .then(dom => {
         virtualDom = dom
+        setVirtualDomState(dom)
         return dom
       })
       .then(res => serializerDOMToString(res))
@@ -91,7 +95,7 @@ const Editor =  () => {
 
   }
 
-  async function  save(onSuccess, onError){
+  async function save(onSuccess, onError){
     isLoading()
     const newDom = virtualDom.cloneNode(virtualDom)
     unwrapTextNodes(newDom)
@@ -105,8 +109,6 @@ const Editor =  () => {
     loadBackupsList()
 
   }
-
-
 
   function enableEditing(frame) {
     frame.contentDocument.body.querySelectorAll("text-editor")
@@ -142,15 +144,15 @@ const Editor =  () => {
   }
 
 
-  console.log(backupsList)
   return (
     <>
       <iframe src='' frameBorder="0" />
       {spinner}
-      <Panel/>
+      <Panel virtualDomState={virtualDomState}/>
       <ConfirmModal modal={true} target={'modal-save'} method={save}/>
       <ChooseModal modal={true} target={'modal-open'} data={pageList} redirect={init}/>
       <ChooseModal modal={true} target={'modal-backup'} data={backupsList} redirect={restoreBackup}/>
+      {virtualDomState && <EditorMeta modal={true} target={'modal-meta'} virtualDom={virtualDomState}/>}
     </>
   )
 }
